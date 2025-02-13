@@ -120,7 +120,6 @@ fn span_to_range(session: &Session, project_root: &Path, span: &internal_baml_di
     dbg!(span.file.path().as_str());
     let absolute_path = span.file.path().clone();
     dbg!(&absolute_path);
-    let path_buf = span.file.path_buf().clone();
     let url = Url::parse(absolute_path.as_str()).expect("Should parse");
     dbg!(session.index.as_ref());
     dbg!(session.index.as_ref().and_then(|i| i.documents.get(&url)));
@@ -130,8 +129,8 @@ fn span_to_range(session: &Session, project_root: &Path, span: &internal_baml_di
     let start_loc = line_index.source_location(TextSize::new(span.start as u32), span.file.as_str());
     let end_loc = line_index.source_location(TextSize::new(span.end as u32), span.file.as_str());
 
-    let (start_line, start_col) = (start_loc.row.get(), start_loc.column.get());
-    let (end_line, end_col) = (end_loc.row.get(), end_loc.column.get());
+    let (start_line, start_col) = (start_loc.row.to_zero_indexed(), start_loc.column.to_zero_indexed());
+    let (end_line, end_col) = (end_loc.row.to_zero_indexed(), end_loc.column.to_zero_indexed());
     Some(lsp_types::Range{
         start: lsp_types::Position::new(start_line as u32, start_col as u32),
         end: lsp_types::Position::new(end_line as u32, end_col as u32),
