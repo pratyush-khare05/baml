@@ -1,6 +1,7 @@
 use lsp_server as lsp;
 use lsp_types::{notification::Notification, request::Request};
 use std::sync::{Arc, Weak};
+use log::info;
 
 type ConnectionSender = crossbeam::channel::Sender<lsp::Message>;
 type ConnectionReceiver = crossbeam::channel::Receiver<lsp::Message>;
@@ -43,6 +44,7 @@ impl ConnectionInitializer {
     ) -> crate::Result<(lsp::RequestId, lsp_types::InitializeParams)> {
         let (id, params) = self.connection.initialize_start()?;
         eprintln!("done with initialize_start");
+        info!("initialize_start() id:{id}, params:{params}");
         Ok((id, serde_json::from_value(params)?))
     }
 

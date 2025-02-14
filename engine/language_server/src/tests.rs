@@ -6,6 +6,7 @@ use indexmap::IndexMap;
 use serde_json::json;
 use std::sync::Arc;
 use std::thread;
+use log::{LevelFilter, info, warn};
 
 use crate::server::Server;
 use crate::server::connection::ConnectionInitializer;
@@ -37,6 +38,7 @@ struct TestCase {
 
 impl TestCase {
     pub fn run(self) -> anyhow::Result<()> {
+        simple_logging::log_to_file("test.log", LevelFilter::Info).unwrap();
         eprintln!("new_test_server");
         let test_server = new_test_server(NonZeroUsize::new(1).unwrap())?;
         eprintln!("about to loop");
@@ -103,10 +105,7 @@ pub fn new_test_server(worker_threads: NonZeroUsize) -> crate::Result<TestServer
   let initialize = lsp_server::Message::Request(lsp_server::Request{
     id: lsp_server::RequestId::from(1),
     method: "initialize".to_string(),
-    params: json!({
-      "capabilities": {},
-      "rootPath": "./",
-    }),
+    params: neovim_initialize_params(),
   });
   let (server_connection, client_connection) = lsp_server::Connection::memory();
   
@@ -143,6 +142,193 @@ pub fn new_test_server(worker_threads: NonZeroUsize) -> crate::Result<TestServer
       receiver: client_connection.receiver
   })
 }
+
+fn neovim_initialize_params() -> serde_json::Value {
+    let pwd = env!("CARGO_MANIFEST_DIR");
+    json!({
+        "workspaceFolders": [{
+            "name": pwd,
+            "uri": format!("file://{}", pwd)
+        }],
+        "trace": "off",
+        "capabilities": {
+            "workspace": {
+                "workspaceFolders": true,
+                "applyEdit": true,
+                "workspaceEdit": {
+                    "resourceOperations": ["rename", "create", "delete"]
+                },
+                "semanticTokens": {
+                    "refreshSupport": true
+                },
+                "symbol": {
+                    "dynamicRegistration": false,
+                    "symbolKind": {
+                        "valueSet": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]
+                    }
+                },
+                "configuration": true,
+                "didChangeConfiguration": {
+                    "dynamicRegistration": false
+                },
+                "didChangeWatchedFiles": {
+                    "dynamicRegistration": true,
+                    "relativePatternSupport": true
+                },
+                "inlayHint": {
+                    "refreshSupport": true
+                }
+            },
+            "window": {
+                "showDocument": {
+                    "support": true
+                },
+                "workDoneProgress": true,
+                "showMessage": {
+                    "messageActionItem": {
+                        "additionalPropertiesSupport": false
+                    }
+                }
+            },
+            "textDocument": {
+                "diagnostic": {
+                    "dynamicRegistration": false
+                },
+                "formatting": {
+                    "dynamicRegistration": true
+                },
+                "rangeFormatting": {
+                    "dynamicRegistration": true
+                },
+                "completion": {
+                    "contextSupport": false,
+                    "completionItemKind": {
+                        "valueSet": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]
+                    },
+                    "completionList": {
+                        "itemDefaults": ["editRange", "insertTextFormat", "insertTextMode", "data"]
+                    },
+                    "completionItem": {
+                        "preselectSupport": false,
+                        "deprecatedSupport": false,
+                        "documentationFormat": ["markdown", "plaintext"],
+                        "snippetSupport": false,
+                        "commitCharactersSupport": false
+                    },
+                    "dynamicRegistration": false
+                },
+                "declaration": {
+                    "linkSupport": true
+                },
+                "definition": {
+                    "linkSupport": true,
+                    "dynamicRegistration": true
+                },
+                "implementation": {
+                    "linkSupport": true
+                },
+                "typeDefinition": {
+                    "linkSupport": true
+                },
+                "inlayHint": {
+                    "dynamicRegistration": true,
+                    "resolveSupport": {
+                        "properties": ["textEdits", "tooltip", "location", "command"]
+                    }
+                },
+                "signatureHelp": {
+                    "dynamicRegistration": false,
+                    "signatureInformation": {
+                        "documentationFormat": ["markdown", "plaintext"],
+                        "activeParameterSupport": true,
+                        "parameterInformation": {
+                            "labelOffsetSupport": true
+                        }
+                    }
+                },
+                "semanticTokens": {
+                    "formats": ["relative"],
+                    "requests": {
+                        "full": {
+                            "delta": true
+                        },
+                        "range": false
+                    },
+                    "overlappingTokenSupport": true,
+                    "multilineTokenSupport": false,
+                    "serverCancelSupport": false,
+                    "augmentsSyntaxTokens": true,
+                    "tokenModifiers": ["declaration", "definition", "readonly", "static", "deprecated", "abstract", "async", "modification", "documentation", "defaultLibrary"],
+                    "dynamicRegistration": false,
+                    "tokenTypes": ["namespace", "type", "class", "enum", "interface", "struct", "typeParameter", "parameter", "variable", "property", "enumMember", "event", "function", "method", "macro", "keyword", "modifier", "comment", "string", "number", "regexp", "operator", "decorator"]
+                },
+                "hover": {
+                    "dynamicRegistration": true,
+                    "contentFormat": ["markdown", "plaintext"]
+                },
+                "documentSymbol": {
+                    "symbolKind": {
+                        "valueSet": [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]
+                    },
+                    "hierarchicalDocumentSymbolSupport": true,
+                    "dynamicRegistration": false
+                },
+                "callHierarchy": {
+                    "dynamicRegistration": false
+                },
+                "synchronization": {
+                    "didSave": true,
+                    "willSaveWaitUntil": true,
+                    "dynamicRegistration": false,
+                    "willSave": true
+                },
+                "publishDiagnostics": {
+                    "relatedInformation": true,
+                    "tagSupport": {
+                        "valueSet": [1,2]
+                    },
+                    "dataSupport": true
+                },
+                "codeAction": {
+                    "isPreferredSupport": true,
+                    "dataSupport": true,
+                    "codeActionLiteralSupport": {
+                        "codeActionKind": {
+                            "valueSet": ["", "quickfix", "refactor", "refactor.extract", "refactor.inline", "refactor.rewrite", "source", "source.organizeImports"]
+                        }
+                    },
+                    "dynamicRegistration": true,
+                    "resolveSupport": {
+                        "properties": ["edit"]
+                    }
+                },
+                "references": {
+                    "dynamicRegistration": false
+                },
+                "rename": {
+                    "dynamicRegistration": true,
+                    "prepareSupport": true
+                },
+                "documentHighlight": {
+                    "dynamicRegistration": false
+                }
+            },
+            "general": {
+                "positionEncodings": ["utf-16"]
+            }
+        },
+        "clientInfo": {
+            "version": "0.10.4",
+            "name": "Neovim"
+        },
+        "rootPath": pwd,
+        "rootUri": format!("file://{}", pwd),
+        "initializationOptions": {},
+        "workDoneToken": "1",
+        "processId": 81093
+    })
+}
+
 
 static SINGLE_FILE: &str = r##"
 client<llm> GPT4 {

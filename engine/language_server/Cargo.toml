@@ -52,9 +52,7 @@ tracing-subscriber = { version = "0.3.18", default-features = false, features = 
 
 schemars = { version = "0.8.16" }
 memchr = { version = "2.7.1" }
-
-# baml_diagnostics
-log = { workspace = true }
+log.workspace = true
 is-macro = { version = "0.3.5" }
 
 # baml_linter
@@ -70,6 +68,7 @@ baml-schema-build = { path ="../baml-schema-wasm" }
 serde-wasm-bindgen = "0.4"
 crossbeam-channel = "0.5.14"
 filetime = "0.2.25"
+simple-logging = "2.0.2"
 
 
 [dev-dependencies]
