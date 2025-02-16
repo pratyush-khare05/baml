@@ -1,10 +1,7 @@
 //! Scheduling, I/O, and API endpoints.
 
-use itertools::partition;
-use std::collections::{HashMap, HashSet};
-use std::fs;
+use log::info;
 use std::num::NonZeroUsize;
-use std::path::{Path, PathBuf};
 // The new PanicInfoHook name requires MSRV >= 1.82
 #[allow(deprecated)]
 use std::panic::PanicInfo;
@@ -31,7 +28,7 @@ mod schedule;
 use crate::message::try_show_message;
 pub(crate) use connection::ClientSender;
 
-pub(crate) type Result<T> = std::result::Result<T, api::Error>;
+pub type Result<T> = std::result::Result<T, api::Error>;
 
 pub(crate) struct Server {
     pub connection: Connection,
@@ -41,7 +38,7 @@ pub(crate) struct Server {
 }
 
 impl Server {
-    pub fn new(worker_threads: NonZeroUsize) -> crate::Result<Self> {
+    pub fn new(worker_threads: NonZeroUsize) -> anyhow::Result<Self> {
         let connection = ConnectionInitializer::stdio();
         let (id, init_params) = connection.initialize_start()?;
 
@@ -62,7 +59,7 @@ impl Server {
         worker_threads: NonZeroUsize,
         connection: Connection,
         init_params: InitializeParams,
-    ) -> crate::Result<Self> {
+    ) -> anyhow::Result<Self> {
         crate::message::init_messenger(connection.make_sender());
 
         let client_capabilities = init_params.capabilities.clone();
@@ -126,7 +123,7 @@ impl Server {
         })
     }
 
-    pub fn run(self) -> crate::Result<()> {
+    pub fn run(self) -> anyhow::Result<()> {
         // The new PanicInfoHook name requires MSRV >= 1.82
         #[allow(deprecated)]
         type PanicHook = Box<dyn Fn(&PanicInfo<'_>) + 'static + Sync + Send>;
@@ -152,7 +149,9 @@ impl Server {
         std::panic::set_hook(Box::new(move |panic_info| {
             use std::io::Write;
 
+
             let backtrace = std::backtrace::Backtrace::force_capture();
+            info!("{panic_info}\n{backtrace}");
             tracing::error!("{panic_info}\n{backtrace}");
 
             // we also need to print to stderr directly for when using `$logTrace` because
@@ -188,7 +187,7 @@ impl Server {
         _client_capabilities: &ClientCapabilities,
         mut session: Session,
         worker_threads: NonZeroUsize,
-    ) -> crate::Result<()> {
+    ) -> anyhow::Result<()> {
         let mut scheduler =
             schedule::Scheduler::new(&mut session, worker_threads, connection.make_sender());
 
@@ -292,56 +291,81 @@ impl Server {
     }
 }
 
-/// Starting from a root directory, return all baml files directly
-/// in the directory and in all subdirectories.
-pub fn gather_baml_files(root_dir: &Path) -> Result<Vec<(String, String)>> {
-    let mut files = Vec::new();
-    _gather_baml_files(root_dir, &mut HashSet::new(), &mut files);
-    Ok(files)
-}
-
-fn _gather_baml_files(
-    dir: &Path,
-    visited_dirs: &mut HashSet<PathBuf>,
-    files: &mut Vec<(String, String)>,
-) -> Result<Vec<(String, String)>> {
-    // Stop recursion if we have seen this directory before.
-    if visited_dirs.contains(dir) {
-        return Ok(Vec::new());
-    }
-
-    // Discover directories and files.
-    let (directories, data_files): (Vec<fs::DirEntry>, Vec<fs::DirEntry>) = fs::read_dir(dir)
-        .map_err(|_| {
-            api::Error::new(
-                anyhow::anyhow!("IO Error"),
-                lsp_server::ErrorCode::InternalError,
-            )
-        })?
-        .into_iter()
-        .map(|f| {
-            f.map_err(|_| {
-                api::Error::new(
-                    anyhow::anyhow!("Bad file"),
-                    lsp_server::ErrorCode::InternalError,
-                )
-            })
-        })
-        .collect::<Result<Vec<fs::DirEntry>>>()?
-        .into_iter()
-        .partition(|f| f.path().is_dir());
-
-    directories.into_iter().try_for_each(|dir_entry| {
-        _gather_baml_files(dir_entry.path(), visited_dirs, files)
-    })?;
-    
-    for dir_entry in files {
-        let path = dir_entry.path();
-        if dir_entry.file_name().as_str().ends_with(".baml") {
-            let contents = fs::read_to_string(dir_entry.path())?;
-            files.push((path.to_string(), contents))
-        }
-    }
-
-    Ok(Vec::new())
-}
+// /// Starting from a root directory, return all baml files in the directory,
+// /// searching recursively.
+// /// The returned tuples are pairs of filepaths (relative to the project root),
+// /// and the full file contents.
+// pub fn gather_baml_files(root_dir: &Path) -> Result<Vec<(String, String)>> {
+//     let mut files = Vec::new();
+//     let empty_path = PathBuf::new();
+//     _gather_baml_files(root_dir, empty_path, &mut HashSet::new(), &mut files)?;
+//     Ok(files)
+// }
+// 
+// /// The recursive body for `gather_baml_files`.
+// /// It will be called at each level of the directory structure under the 
+// /// project root.
+// /// 
+// /// Params:
+// ///   root_path: Project directory.
+// ///   subdir: Path relative to root_path that we're currently searching.
+// ///   visited_dirs: Track every visited subdir to prevent symlink loops.
+// ///   files: Accumulated subdirs and their respective file contents.
+// fn _gather_baml_files<'a>(
+//     root_path: &'a Path,
+//     subdir: PathBuf,
+//     visited_dirs: &mut HashSet<PathBuf>,
+//     files: &'a mut Vec<(String, String)>,
+// ) -> Result<()> {
+// 
+//     // Stop recursion if we have seen this directory before.
+//     if visited_dirs.contains(&subdir) {
+//         return Ok(());
+//     }
+// 
+//     visited_dirs.insert(subdir.clone());
+//     let absolute = root_path.join(&subdir);
+// 
+//     let dir_entries = fs::read_dir(absolute).map_err(|e| internal_error(e.to_string()))?;
+//     for dir_entry in dir_entries.filter_map(|d| d.ok()) {
+// 
+//         if dir_entry.path().is_dir() {
+//             let subdir = subdir.join(dir_entry.file_name());
+//             _gather_baml_files(root_path, subdir, visited_dirs, files)?;
+// 
+//         } else {
+//             if let Some(file_name) = dir_entry.path().file_name().and_then(|os_str| os_str.to_str()) {
+//                 if file_name.ends_with(".baml") {
+//                     let file_path = subdir.join(file_name);
+//                     let contents = fs::read_to_string(dir_entry.path()).map_err(|e| internal_error(e.to_string()))?;
+//                     if let Some(relative_path) = file_path.to_str() {
+//                         files.push((relative_path.to_string(), contents));
+//                     }
+//                 }
+//             }
+// 
+//         }
+//     }
+//     Ok(())
+// }
+// 
+// #[track_caller]
+// fn internal_error(msg: String) -> api::Error {
+//     api::Error::new(
+//         anyhow::anyhow!(msg),
+//         lsp_server::ErrorCode::InternalError,
+//     )
+// }
+// 
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+//     use std::path::PathBuf;
+// 
+//     #[test]
+//     fn test_gather() {
+//         let res = gather_baml_files(&PathBuf::from("/Users/greghale/code/baml/integ-tests/baml_src")).unwrap();
+//         dbg!(&res);
+//         panic!("Here");
+//     }
+// }

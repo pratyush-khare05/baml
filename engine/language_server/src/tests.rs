@@ -100,7 +100,7 @@ impl TestCase {
     }
 }
 
-pub fn new_test_server(worker_threads: NonZeroUsize) -> crate::Result<TestServer> {
+pub fn new_test_server(worker_threads: NonZeroUsize) -> anyhow::Result<TestServer> {
 
   let initialize = lsp_server::Message::Request(lsp_server::Request{
     id: lsp_server::RequestId::from(1),

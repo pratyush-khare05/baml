@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use baml_runtime::InternalRuntimeInterface;
+use log::info;
 use lsp_server::ErrorCode;
 use lsp_types::notification::DidOpenTextDocument;
 use lsp_types::{DiagnosticSeverity, DidOpenTextDocumentParams, PublishDiagnosticsParams, Url};
@@ -29,6 +30,7 @@ impl SyncNotificationHandler for DidOpenTextDocumentHandler {
         _requester: &mut Requester,
         params: DidOpenTextDocumentParams,
     ) -> Result<()> {
+        info!("did_open");
         tracing::info!("DidOpenTextDocumentHandler");
         // let Ok(path) = url_to_any_system_path(&params.text_document.uri) else {
         //     return Ok(());
@@ -120,8 +122,10 @@ fn span_to_range(session: &Session, project_root: &Path, span: &internal_baml_di
     dbg!(span.file.path().as_str());
     let absolute_path = span.file.path().clone();
     dbg!(&absolute_path);
+    info!("About to URL::parse {}", absolute_path);
     let url = Url::parse(absolute_path.as_str()).expect("Should parse");
     dbg!(session.index.as_ref());
+    info!("documents.keys: {:?}", session.index.as_ref().unwrap().documents.keys());
     dbg!(session.index.as_ref().and_then(|i| i.documents.get(&url)));
     let doc = session.index.as_ref().and_then(|i| i.documents.get(&url)).expect("Should exist");
     let line_index = doc.as_text().unwrap().index();

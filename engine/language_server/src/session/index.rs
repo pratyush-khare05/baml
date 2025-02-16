@@ -42,7 +42,7 @@ impl Index {
         content_changes: Vec<lsp_types::TextDocumentContentChangeEvent>,
         new_version: DocumentVersion,
         encoding: PositionEncoding,
-    ) -> crate::Result<()> {
+    ) -> anyhow::Result<()> {
         let controller = self.document_controller_for_key(key)?;
         let Some(document) = controller.as_text_mut() else {
             anyhow::bail!("Text document URI does not point to a text document");
@@ -77,7 +77,7 @@ impl Index {
             .insert(url, DocumentController::new_text(document));
     }
 
-    pub fn close_document(&mut self, key: &DocumentKey) -> crate::Result<()> {
+    pub fn close_document(&mut self, key: &DocumentKey) -> anyhow::Result<()> {
         let Some(url) = self.url_for_key(key).cloned() else {
             anyhow::bail!("Tried to close unavailable document `{key}`");
         };
@@ -91,7 +91,7 @@ impl Index {
     pub fn document_controller_for_key(
         &mut self,
         key: &DocumentKey,
-    ) -> crate::Result<&mut DocumentController> {
+    ) -> anyhow::Result<&mut DocumentController> {
         let Some(url) = self.url_for_key(key).cloned() else {
             anyhow::bail!("Tried to open unavailable document `{key}`");
         };

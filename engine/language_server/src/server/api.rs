@@ -241,9 +241,9 @@ fn cast_notification<N>(
     ))
 }
 
-pub(crate) struct Error {
-    pub(crate) code: lsp_server::ErrorCode,
-    pub(crate) error: anyhow::Error,
+pub struct Error {
+    pub code: lsp_server::ErrorCode,
+    pub error: anyhow::Error,
 }
 
 /// A trait to convert result types into the server result type, [`super::Result`].

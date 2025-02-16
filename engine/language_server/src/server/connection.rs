@@ -41,7 +41,7 @@ impl ConnectionInitializer {
     /// along with the initialization parameters that were provided.
     pub fn initialize_start(
         &self,
-    ) -> crate::Result<(lsp::RequestId, lsp_types::InitializeParams)> {
+    ) -> anyhow::Result<(lsp::RequestId, lsp_types::InitializeParams)> {
         let (id, params) = self.connection.initialize_start()?;
         eprintln!("done with initialize_start");
         info!("initialize_start() id:{id}, params:{params}");
@@ -56,7 +56,7 @@ impl ConnectionInitializer {
         server_capabilities: &lsp_types::ServerCapabilities,
         name: &str,
         version: &str,
-    ) -> crate::Result<Connection> {
+    ) -> anyhow::Result<Connection> {
         eprintln!("a");
         self.connection.initialize_finish(
             id,
@@ -95,7 +95,7 @@ impl Connection {
     }
 
     /// Check and respond to any incoming shutdown requests; returns`true` if the server should be shutdown.
-    pub fn handle_shutdown(&self, message: &lsp::Message) -> crate::Result<bool> {
+    pub fn handle_shutdown(&self, message: &lsp::Message) -> anyhow::Result<bool> {
         match message {
             lsp::Message::Request(lsp::Request { id, method, .. })
                 if method == lsp_types::request::Shutdown::METHOD =>
@@ -125,7 +125,7 @@ impl Connection {
     /// This is guaranteed to be nearly immediate since
     /// we close the only active channels to these threads prior
     /// to joining them.
-    pub fn close(self) -> crate::Result<()> {
+    pub fn close(self) -> anyhow::Result<()> {
         std::mem::drop(
             Arc::into_inner(self.sender)
                 .expect("the client sender shouldn't have more than one strong reference"),
@@ -146,7 +146,7 @@ pub(crate) struct ClientSender {
 
 // note: additional wrapper functions for senders may be implemented as needed.
 impl ClientSender {
-    pub(crate) fn send(&self, msg: lsp::Message) -> crate::Result<()> {
+    pub(crate) fn send(&self, msg: lsp::Message) -> anyhow::Result<()> {
         eprintln!("ABOUT TO SEND {msg:?}");
         let Some(sender) = self.weak_sender.upgrade() else {
             anyhow::bail!("The connection with the client has been closed");

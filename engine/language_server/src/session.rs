@@ -1,5 +1,7 @@
 //! Data model, state management, and configuration resolution.
 
+use anyhow::Context;
+use log::info;
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -14,7 +16,7 @@ use lsp_types::{ClientCapabilities, TextDocumentContentChangeEvent, Url};
 // use ruff_db::Db;
 
 use crate::baml_db::{File, FileRevision, FileStatus};
-use crate::baml_project::{BamlProject, Project};
+use crate::baml_project::{BamlProject, Project, file_utils::gather_files};
 use crate::edit::{DocumentKey, DocumentVersion};
 // use crate::system::{url_to_any_system_path, AnySystemPath, LSPSystem};
 use crate::{PositionEncoding, TextDocument};
@@ -57,12 +59,12 @@ impl Session {
         position_encoding: PositionEncoding,
         global_settings: ClientSettings,
         workspace_folders: &[(Url, ClientSettings)],
-    ) -> crate::Result<Self> {
+    ) -> anyhow::Result<Self> {
         let mut workspaces = BTreeMap::new();
         let index = Arc::new(index::Index::new(global_settings));
 
         for (url, _) in workspace_folders {
-            let path = url
+            let workspace_path = url
                 .to_file_path()
                 .map_err(|()| anyhow!("Workspace URL is not a file or directory: {:?}", url))?;
             // let system_path = SystemPath::from_std_path(&path)
@@ -72,10 +74,19 @@ impl Session {
             // TODO(dhruvmanila): Get the values from the client settings
             // let metadata = ProjectMetadata::discover(system_path, &system)?;
             // TODO(micha): Handle the case where the program settings are incorrect more gracefully.
-            workspaces.insert(path, Project::new(
+            let workspace_file_paths = gather_files(&workspace_path, false)?;
+            info!("{:?}", workspace_file_paths);
+            let workspace_files = workspace_file_paths.into_iter().map(|file_path| {
+                let contents = std::fs::read_to_string(&file_path).context("Failed to read file")?;
+                let file_path = file_path.strip_prefix(&workspace_path).context("Expected file to be under workspace")?.to_str().context("Expected utf-8 filepath")?.to_string();
+                Ok((format!("file:///{file_path}"), contents))
+            }).collect::<anyhow::Result<HashMap<_,_>>>()?;
+            info!("{:?}", workspace_files);
+
+            workspaces.insert(workspace_path, Project::new(
                 BamlProject {
                     root_dir_name: url.to_string(),
-                    files: HashMap::new(),
+                    files: workspace_files,
                     unsaved_files: HashMap::new(),
                 }
             ));
@@ -170,7 +181,7 @@ impl Session {
         key: &DocumentKey,
         content_changes: Vec<TextDocumentContentChangeEvent>,
         new_version: DocumentVersion,
-    ) -> crate::Result<()> {
+    ) -> anyhow::Result<()> {
         let position_encoding = self.position_encoding;
         self.index_mut()
             .update_text_document(key, content_changes, new_version, position_encoding)
@@ -178,7 +189,7 @@ impl Session {
 
     /// De-registers a document, specified by its key.
     /// Calling this multiple times for the same document is a logic error.
-    pub(crate) fn close_document(&mut self, key: &DocumentKey) -> crate::Result<()> {
+    pub(crate) fn close_document(&mut self, key: &DocumentKey) -> anyhow::Result<()> {
         self.index_mut().close_document(key)?;
         Ok(())
     }

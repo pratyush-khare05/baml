@@ -29,7 +29,7 @@ pub(crate) const DIAGNOSTIC_NAME: &str = "BAML";
 
 /// A common result type used in most cases where a
 /// result type is needed.
-pub(crate) type Result<T> = anyhow::Result<T>;
+// pub(crate) type Result<T> = anyhow::Result<T>;
 
 pub(crate) fn version() -> &'static str {
     env!("CARGO_PKG_VERSION")

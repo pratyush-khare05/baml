@@ -29,7 +29,7 @@ use std::path::Path;
 // use std::sync::Arc;
 use std::time::Instant;
 
-mod file_utils;
+pub mod file_utils;
 pub mod metadata;
 mod position_utils;
 pub mod watch;
