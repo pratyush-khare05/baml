@@ -156,9 +156,6 @@ impl BamlRuntime {
             .map(|(k, v)| (k.as_ref().to_string(), v.as_ref().to_string()))
             .collect();
         let inner = InternalBamlRuntime::from_file_content(root_path, files)?;
-        eprintln!("CREATED BAMLRUNTIME");
-        dbg!(&root_path);
-        dbg!(&files);
         Ok(BamlRuntime {
             inner,
             tracer: BamlTracer::new(None, env_vars.into_iter())?.into(),

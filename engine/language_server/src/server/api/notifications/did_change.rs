@@ -1,14 +1,17 @@
 use lsp_server::ErrorCode;
+use log::error;
 use lsp_types::notification::DidChangeTextDocument;
-use lsp_types::DidChangeTextDocumentParams;
+use lsp_types::{DidChangeTextDocumentParams, PublishDiagnosticsParams};
 
 use crate::baml_project::watch::ChangeEvent;
 
+use crate::server::api::diagnostics::session_lsp_diagnostics;
 use crate::server::api::traits::{NotificationHandler, SyncNotificationHandler};
 use crate::server::api::LSPResult;
 use crate::server::client::{Notifier, Requester};
 use crate::server::Result;
 use crate::session::Session;
+use crate::{DocumentKey, TextDocument};
 // use crate::system::{url_to_any_system_path, AnySystemPath};
 
 pub(crate) struct DidChangeTextDocumentHandler;
@@ -20,11 +23,26 @@ impl NotificationHandler for DidChangeTextDocumentHandler {
 impl SyncNotificationHandler for DidChangeTextDocumentHandler {
     fn run(
         session: &mut Session,
-        _notifier: Notifier,
+        notifier: Notifier,
         _requester: &mut Requester,
         params: DidChangeTextDocumentParams,
     ) -> Result<()> {
         tracing::info!("DidChangeTextDocumentHandler");
+
+        let url = params.text_document.uri;
+        let key = DocumentKey::Text(url.clone());
+        session.update_text_document(&key, params.content_changes, params.text_document.version).expect("FAILED TO UPDATE");
+
+        let diagnostics = session_lsp_diagnostics(session);
+
+        // TODO: Only send this when clients do not support pull diagnostics?
+        notifier.notify::<lsp_types::notification::PublishDiagnostics>( PublishDiagnosticsParams {
+            uri: url,
+            version: Some(params.text_document.version),
+            diagnostics,
+        }).map_err(|e| {
+            error!("did_change err: {}", e)
+        }).unwrap();
         // let Ok(path) = url_to_any_system_path(&params.text_document.uri) else {
         //     return Ok(());
         // };

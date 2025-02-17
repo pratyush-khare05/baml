@@ -1,7 +1,8 @@
 //! Data model, state management, and configuration resolution.
 
 use anyhow::Context;
-use log::info;
+use index::DocumentController;
+use log::{error, info};
 use std::collections::{BTreeMap, HashMap};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -61,7 +62,7 @@ impl Session {
         workspace_folders: &[(Url, ClientSettings)],
     ) -> anyhow::Result<Self> {
         let mut workspaces = BTreeMap::new();
-        let index = Arc::new(index::Index::new(global_settings));
+        let mut index = index::Index::new(global_settings);
 
         for (url, _) in workspace_folders {
             let workspace_path = url
@@ -79,6 +80,13 @@ impl Session {
             let workspace_files = workspace_file_paths.into_iter().map(|file_path| {
                 let contents = std::fs::read_to_string(&file_path).context("Failed to read file")?;
                 let file_path = file_path.strip_prefix(&workspace_path).context("Expected file to be under workspace")?.to_str().context("Expected utf-8 filepath")?.to_string();
+
+                let absolute_file_path = PathBuf::from(url.path()).join(&file_path);
+                info!("About to Url::from_file_path({:?})", &absolute_file_path);
+                // let file_url = Url::from_file_path(&file_path).expect("TODO");
+                let file_absolute_url = Url::from_file_path(absolute_file_path).unwrap();
+                let text_document = TextDocument::new(contents.clone(), 0);
+                index.open_text_document(file_absolute_url, text_document);
                 Ok((format!("file:///{file_path}"), contents))
             }).collect::<anyhow::Result<HashMap<_,_>>>()?;
             info!("{:?}", workspace_files);
@@ -95,7 +103,7 @@ impl Session {
         Ok(Self {
             position_encoding,
             projects_by_workspace_folder: workspaces,
-            index: Some(index),
+            index: Some(Arc::new(index)),
             resolved_client_capabilities: Arc::new(ResolvedClientCapabilities::new(
                 client_capabilities,
             )),
@@ -133,7 +141,10 @@ impl Session {
     /// minimum root path in the project map.
     pub(crate) fn default_project_db(&self) -> &Project {
         // SAFETY: Currently, red knot only support a single project.
-        self.projects_by_workspace_folder.values().next().unwrap()
+        self.projects_by_workspace_folder.values().next().unwrap_or_else(|| {
+            error!("Tried to get default project and there was none");
+            panic!("Tried to get default project and there was none")
+        })
     }
 
     /// Returns a mutable reference to the default project [`ProjectDatabase`].
@@ -183,8 +194,31 @@ impl Session {
         new_version: DocumentVersion,
     ) -> anyhow::Result<()> {
         let position_encoding = self.position_encoding;
-        self.index_mut()
-            .update_text_document(key, content_changes, new_version, position_encoding)
+        
+        let doc_key = match key {
+            DocumentKey::Text(url) => url,
+        };
+        let doc_contents = {
+            let mut index = self.index_mut();
+            index.update_text_document(key, content_changes, new_version, position_encoding)?;
+
+            let doc_controller = {
+                index.documents.get(doc_key).expect("We just inserted this, so it should be there")
+            };
+            let text_document = match doc_controller {
+                DocumentController::Text(text_document) => text_document,
+            };
+            text_document.contents().to_string()
+        };
+
+        self.projects_by_workspace_folder.iter_mut().for_each(|(_folder, project)| {
+            let key_str = doc_key.to_string();
+            if project.baml_project.files.get(&key_str).is_some() {
+                project.baml_project.files.insert(key_str, doc_contents.to_string());
+            }
+        });
+        Ok(())
+        
     }
 
     /// De-registers a document, specified by its key.
@@ -201,7 +235,7 @@ impl Session {
     /// Panics if there's a mutable reference to the index via [`index_mut`].
     ///
     /// [`index_mut`]: Session::index_mut
-    fn index(&self) -> &index::Index {
+    pub fn index(&self) -> &index::Index {
         self.index.as_ref().unwrap()
     }
 

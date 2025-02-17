@@ -10,6 +10,7 @@ use lsp_types::{DiagnosticSeverity, DidOpenTextDocumentParams, PublishDiagnostic
 use crate::baml_project::watch::ChangeEvent;
 use crate::baml_project::Project;
 use crate::baml_text_size::TextSize;
+use crate::server::api::diagnostics::session_lsp_diagnostics;
 use crate::server::api::traits::{NotificationHandler, SyncNotificationHandler};
 use crate::server::client::{Notifier, Requester};
 use crate::server::{Result, api::Error};
@@ -36,14 +37,10 @@ impl SyncNotificationHandler for DidOpenTextDocumentHandler {
         //     return Ok(());
         // };
 
-        eprintln!("ADDING DOCUMENT");
         let document = TextDocument::new(params.text_document.text, params.text_document.version);
 
-        eprintln!("CALLING open_text_document");
         let url = params.text_document.uri;
         session.open_text_document(url.clone(), document);
-        eprintln!("FINISHED CALLING open_text_document");
-        // dbg!(&session.index.as_ref().map(|i| i.documents));
 
         let diagnostics = session_lsp_diagnostics(session);
 
@@ -53,8 +50,6 @@ impl SyncNotificationHandler for DidOpenTextDocumentHandler {
             version: Some(params.text_document.version),
             diagnostics,
         }).expect("TODO");
-
-        eprintln!("PUSHED DIAGNOSTICS");
 
         // match path {
         //     AnySystemPath::System(path) => {
@@ -76,103 +71,6 @@ impl SyncNotificationHandler for DidOpenTextDocumentHandler {
     }
 }
 
-// TODO: This assumes a single project. Fix.
-// TODO: Handle errors.
-fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> {
-    let (root_path, proj) = session.projects_by_workspace_folder.iter().next().expect("Should be 1 project");
-    dbg!(&proj.current_runtime.is_some());
-    let fake_env = HashMap::new();
-    let baml_diagnostics = match proj.baml_project.runtime(fake_env) {
-        Ok(runtime) => {
-            eprintln!("OK Diagnostics: {:?}", runtime.internal().diagnostics());
-            runtime.internal().diagnostics().clone()
-        },
-        Err(err) => {
-            eprintln!("Err Diagnostics: {:?}", err);
-            // let mut diagnostics = internal_baml_diagnostics::Diagnostics::new(PathBuf::new());
-            // diagnostics.push_error(err);
-            err
-        },
-    };
-
-    let spans = baml_diagnostics
-         .errors()
-         .iter()
-         .map(|error| ("ERROR", error.span()))
-         .chain(baml_diagnostics.warnings().iter().map(|warning| ("WARNING", warning.span())))
-         .collect::<Vec<_>>();
-    info!("SPANS: {:?}", spans);
-
-    let errors = 
-        baml_diagnostics.errors().iter().map(|error| lsp_types::Diagnostic::new(
-            span_to_range(session, root_path, error.span()).expect("Need a range"),
-            Some(DiagnosticSeverity::ERROR),
-            None,
-            None,
-            error.message().to_string(),
-            None,
-            None
-        ));
-    let warnings =
-        baml_diagnostics.warnings().iter().map(|warning| lsp_types::Diagnostic::new(
-            span_to_range(session, root_path, warning.span()).expect("Need a range"),
-            Some(DiagnosticSeverity::WARNING),
-            None,
-            None,
-            warning.message().to_string(),
-            None,
-            None
-        ));
-    errors.chain(warnings).collect()
-}
-
-fn span_to_range(session: &Session, project_root: &Path, span: &internal_baml_diagnostics::Span) -> Option<lsp_types::Range> {
-    dbg!(span.file.path().as_str());
-    // These are formatted as 
-    let span_path_with_prefix = span.file.path();
-    let span_path = span_path_with_prefix.strip_prefix("file://")?;
-    info!("span_path: {}", span_path);
-    info!("absolute_path = join {:?} with {:?}", project_root, span_path);
-    let absolute_path = project_root.join(span_path).clone();
-    dbg!(&absolute_path);
-    // info!("About to URL::parse {:?}", absolute_path);
-    let url = Url::from_file_path(span_path).or(Url::from_file_path(absolute_path)).expect("Should parse");
-    dbg!(session.index.as_ref());
-    dbg!(session.index.as_ref().and_then(|i| i.documents.get(&url)));
-    let doc_key = Url::from_file_path(ensure_absolute(project_root, &PathBuf::from(span_path))).expect("Should parse2");
-    info!("lookup {:?} from documents.keys: {:?}", doc_key, session.index.as_ref().unwrap().documents.keys());
-    let doc = session.index.as_ref().and_then(|i| i.documents.get(&doc_key))
-        .expect("Should exist");
-    let line_index = doc.as_text().unwrap().index();
-
-    let start_loc = line_index.source_location(TextSize::new(span.start as u32), span.file.as_str());
-    let end_loc = line_index.source_location(TextSize::new(span.end as u32), span.file.as_str());
-
-    let (start_line, start_col) = (start_loc.row.to_zero_indexed(), start_loc.column.to_zero_indexed());
-    let (end_line, end_col) = (end_loc.row.to_zero_indexed(), end_loc.column.to_zero_indexed());
-    Some(lsp_types::Range{
-        start: lsp_types::Position::new(start_line as u32, start_col as u32),
-        end: lsp_types::Position::new(end_line as u32, end_col as u32),
-    })
-}
-
-/// For a project root and a path to a file in that project, return an absolute path
-/// to that file.
-/// This function is taylored to the quirks of spans coming from baml_runtime, which
-/// sometimes include absolute paths to the source files and sometimes include
-/// "relative" paths (scare-quotes are used because these paths prefixed with `/`,
-/// making them technically absolute).
-fn ensure_absolute(project_root: &Path, file_path: &Path) -> PathBuf {
-    let file_path_relative = file_path.strip_prefix(std::path::MAIN_SEPARATOR_STR).unwrap_or(file_path);
-
-    if file_path.to_str().unwrap().starts_with(project_root.to_str().unwrap()) {
-        info!("No joining needed, returning {:?}", file_path);
-        PathBuf::from(file_path)
-    } else {
-        info!("Joining {:?} with {:?} to get {:?}", project_root, file_path, project_root.join(file_path));
-        project_root.join(file_path_relative)
-    }
-}
  
 #[cfg(test)]
 mod tests {

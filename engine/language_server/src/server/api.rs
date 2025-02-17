@@ -1,5 +1,6 @@
 use crate::{server::schedule::Task, session::Session};
 use lsp_server;
+use log::info;
 
 // use crate::system::{url_to_any_system_path, AnySystemPath};
 
@@ -128,6 +129,7 @@ fn background_request_task<'a, R: traits::BackgroundDocumentRequestHandler>(
             return Box::new(|_, _| {});
         };
         // TODO get the relevant Project and pass it in.
+        info!("session.projects.len(): {:?}", session.projects_by_workspace_folder.len());
         let db = session.default_project_db().clone();
 
         Box::new(move |notifier, responder| {
