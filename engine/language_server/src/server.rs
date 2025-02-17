@@ -5,6 +5,7 @@ use std::num::NonZeroUsize;
 // The new PanicInfoHook name requires MSRV >= 1.82
 #[allow(deprecated)]
 use std::panic::PanicInfo;
+use std::path::PathBuf;
 
 use lsp_server::Message;
 use lsp_types::{
@@ -17,6 +18,7 @@ use schedule::Task;
 
 use self::connection::{Connection, ConnectionInitializer};
 use self::schedule::event_loop_thread;
+use crate::baml_project::file_utils::find_top_level_parent;
 use crate::session::{AllSettings, ClientSettings, Session};
 use crate::PositionEncoding;
 
@@ -93,12 +95,24 @@ impl Server {
         let workspaces = init_params
             .workspace_folders
             .filter(|folders| !folders.is_empty())
-            .map(|folders| folders.into_iter().map(|folder| {
-                workspace_for_url(folder.uri)
+            .map(|folders| folders.into_iter().filter_map(|folder| {
+                info!("attempting folder: {:?}", folder);
+                let baml_src_dir = if folder.uri.path().ends_with("baml_src") {
+                    PathBuf::from(folder.uri.path())
+                } else {
+                     find_top_level_parent(&PathBuf::from(folder.uri.path()))?
+                    };
+                info!("attempting to parse folder: {:?}", baml_src_dir);
+                let baml_src_uri = Url::from_file_path(baml_src_dir.to_str()?).ok()?;
+                info!("got folder: {:?}", baml_src_uri);
+                Some(workspace_for_url(baml_src_uri))
             }).collect())
             .or_else(|| {
                 tracing::warn!("No workspace(s) were provided during initialization. Using the current working directory as a default workspace...");
-                let uri = Url::from_file_path(std::env::current_dir().ok()?).ok()?;
+                let baml_src_dir = find_top_level_parent(&std::env::current_dir().ok()?)?;
+                info!("OR_ELSE: {:?}", baml_src_dir);
+                let uri = Url::from_file_path(baml_src_dir).ok()?;
+                // let uri = Url::from_file_path(std::env::current_dir().ok()?).ok()?;
                 Some(vec![workspace_for_url(uri)])
             })
             .ok_or_else(|| {
