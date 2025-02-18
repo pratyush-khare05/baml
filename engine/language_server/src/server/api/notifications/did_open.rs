@@ -10,6 +10,7 @@ use lsp_types::{DiagnosticSeverity, DidOpenTextDocumentParams, PublishDiagnostic
 use crate::baml_project::watch::ChangeEvent;
 use crate::baml_project::Project;
 use crate::baml_text_size::TextSize;
+use crate::server::api::ResultExt;
 use crate::server::api::diagnostics::session_lsp_diagnostics;
 use crate::server::api::traits::{NotificationHandler, SyncNotificationHandler};
 use crate::server::client::{Notifier, Requester};
@@ -37,10 +38,11 @@ impl SyncNotificationHandler for DidOpenTextDocumentHandler {
         //     return Ok(());
         // };
 
-        let document = TextDocument::new(params.text_document.text, params.text_document.version);
+        // let document = TextDocument::new(params.text_document.text, params.text_document.version);
 
         let url = params.text_document.uri;
-        session.open_text_document(url.clone(), document);
+        // session.open_text_document(url.clone(), document);
+        session.reload().internal_error()?;
 
         let diagnostics = session_lsp_diagnostics(session);
 

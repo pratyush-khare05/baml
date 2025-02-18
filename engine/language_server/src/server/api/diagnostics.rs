@@ -5,6 +5,7 @@ use lsp_types::{notification::PublishDiagnostics, PublishDiagnosticsParams, Url}
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use baml_runtime::InternalRuntimeInterface;
+use internal_baml_diagnostics::Diagnostics;
 
 use crate::baml_text_size::TextSize;
 use crate::server::client::Notifier;
@@ -37,12 +38,14 @@ pub fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> 
         Ok(runtime) => {
             info!("OK Diagnostics: {:?}", runtime.internal().diagnostics());
             runtime.internal().diagnostics().clone()
+            // Diagnostics::new(PathBuf::from("/fake1"))
         },
         Err(err) => {
             info!("Err Diagnostics: {:?}", err);
             // let mut diagnostics = internal_baml_diagnostics::Diagnostics::new(PathBuf::new());
             // diagnostics.push_error(err);
             err
+            // Diagnostics::new(PathBuf::from("/fake2"))
         },
     };
 

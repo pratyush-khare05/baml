@@ -1,7 +1,6 @@
 use lsp_server as lsp;
 use lsp_types::{notification::Notification, request::Request};
 use std::sync::{Arc, Weak};
-use log::info;
 
 type ConnectionSender = crossbeam::channel::Sender<lsp::Message>;
 type ConnectionReceiver = crossbeam::channel::Receiver<lsp::Message>;
@@ -43,8 +42,6 @@ impl ConnectionInitializer {
         &self,
     ) -> anyhow::Result<(lsp::RequestId, lsp_types::InitializeParams)> {
         let (id, params) = self.connection.initialize_start()?;
-        eprintln!("done with initialize_start");
-        info!("initialize_start() id:{id}, params:{params}");
         Ok((id, serde_json::from_value(params)?))
     }
 
@@ -57,7 +54,6 @@ impl ConnectionInitializer {
         name: &str,
         version: &str,
     ) -> anyhow::Result<Connection> {
-        eprintln!("a");
         self.connection.initialize_finish(
             id,
             serde_json::json!({
@@ -68,7 +64,6 @@ impl ConnectionInitializer {
                 }
             }),
         )?;
-        eprintln!("b");
         let Self {
             connection: lsp::Connection { sender, receiver },
             threads,
@@ -147,12 +142,10 @@ pub(crate) struct ClientSender {
 // note: additional wrapper functions for senders may be implemented as needed.
 impl ClientSender {
     pub(crate) fn send(&self, msg: lsp::Message) -> anyhow::Result<()> {
-        eprintln!("ABOUT TO SEND {msg:?}");
         let Some(sender) = self.weak_sender.upgrade() else {
             anyhow::bail!("The connection with the client has been closed");
         };
         let res = sender.send(msg)?;
-        eprintln!("FINISHED SENDING IT");
         Ok(res)
     }
 }

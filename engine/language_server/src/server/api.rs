@@ -278,3 +278,13 @@ impl std::fmt::Display for Error {
         self.error.fmt(f)
     }
 }
+
+trait ResultExt<T> {
+    fn internal_error(self) -> Result<T>;
+}
+
+impl <T> ResultExt<T> for anyhow::Result<T> {
+    fn internal_error(self) -> Result<T> {
+        self.map_err(|e| Error { error: e, code: lsp_server::ErrorCode::InternalError })
+
+    } }

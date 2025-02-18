@@ -1,3 +1,5 @@
+use anyhow::Context;
+use file_utils::gather_files;
 use serde::{Serialize, Deserialize};
 use internal_baml_diagnostics::{DatamodelError, Diagnostics};
 use internal_baml_codegen::GenerateOutput;
@@ -25,9 +27,11 @@ use position_utils::get_word_at_position;
 // use rustc_hash::FxHashSet;
 use std::collections::HashMap;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 // use std::sync::Arc;
 use std::time::Instant;
+
+use crate::TextDocument;
 
 pub mod file_utils;
 pub mod metadata;
@@ -170,10 +174,38 @@ impl BamlProject {
         }
     }
 
+    /// Load files into the current state. Also return the newly loaded files.
+    pub fn load_files(&mut self) -> anyhow::Result<HashMap<Url, String>> {
+        let workspace_file_paths = gather_files(&PathBuf::from(&self.root_dir_name), false)?;
+        let workspace_files = workspace_file_paths.into_iter().map(|file_path| {
+            tracing::info!("ABOUT TO OPEN {:?}", file_path);
+            let contents = std::fs::read_to_string(&file_path).context("Failed to read file")?;
+            tracing::info!("FINISHED OPEN {:?}", file_path);
+
+            // let file_path = file_path.strip_prefix(&self.root_dir_name).context("Expected file to be under workspace")?.to_str().context("Expected utf-8 filepath")?.to_string();
+
+            // let absolute_file_path = PathBuf::from().join(&file_path);
+            // info!("About to Url::from_file_path({:?})", &absolute_file_path);
+            let file_url = Url::from_file_path(&file_path).expect("TODO");
+            // let file_absolute_url = Url::from_file_path(file_path).unwrap();
+            // let text_document = TextDocument::new(contents.clone(), 0);
+            // index.open_text_document(file_url, text_document);
+            Ok((file_url, contents))
+        }).collect::<anyhow::Result<HashMap<_,_>>>()?;
+
+        let project_files = workspace_files.iter().map(|(file_path, contents)| {
+            (file_path.to_string(), contents.clone())
+        }).collect();
+
+        self.files = project_files;
+        Ok(workspace_files)
+    }
 
     pub fn runtime(&self, env_vars: HashMap<String, String>) -> Result<BamlRuntime, Diagnostics> {
         let mut hm = self.files.iter().collect::<HashMap<_, _>>();
         hm.extend(self.unsaved_files.iter());
+        tracing::info!("runtime files: {:?}", hm.keys());
+        panic!("SHORTCIRCUIT RUNTIME: {:?}", hm.keys());
 
         BamlRuntime::from_file_content(&self.root_dir_name, &hm, env_vars)
             .map_err(|e| match e.downcast::<DiagnosticsError>() {

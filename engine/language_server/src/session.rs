@@ -17,7 +17,7 @@ use lsp_types::{ClientCapabilities, TextDocumentContentChangeEvent, Url};
 // use ruff_db::Db;
 
 use crate::baml_db::{File, FileRevision, FileStatus};
-use crate::baml_project::{BamlProject, Project, file_utils::gather_files};
+use crate::baml_project::{file_utils::gather_files, BamlProject, Project};
 use crate::edit::{DocumentKey, DocumentVersion};
 // use crate::system::{url_to_any_system_path, AnySystemPath, LSPSystem};
 use crate::{PositionEncoding, TextDocument};
@@ -75,42 +75,57 @@ impl Session {
             // TODO(dhruvmanila): Get the values from the client settings
             // let metadata = ProjectMetadata::discover(system_path, &system)?;
             // TODO(micha): Handle the case where the program settings are incorrect more gracefully.
+            info!("ABOUT TO CALL gather_files on {:?}", &workspace_path);
             let workspace_file_paths = gather_files(&workspace_path, false)?;
-            info!("{:?}", workspace_file_paths);
-            let workspace_files = workspace_file_paths.into_iter().map(|file_path| {
-                let contents = std::fs::read_to_string(&file_path).context("Failed to read file")?;
-                let file_path = file_path.strip_prefix(&workspace_path).context("Expected file to be under workspace")?.to_str().context("Expected utf-8 filepath")?.to_string();
+            info!("WORKSPACE_FILE_PATHS {:?}", workspace_file_paths);
 
-                let absolute_file_path = PathBuf::from(url.path()).join(&file_path);
-                info!("About to Url::from_file_path({:?})", &absolute_file_path);
-                // let file_url = Url::from_file_path(&file_path).expect("TODO");
-                let file_absolute_url = Url::from_file_path(absolute_file_path).unwrap();
-                let text_document = TextDocument::new(contents.clone(), 0);
-                index.open_text_document(file_absolute_url, text_document);
-                Ok((format!("file:///{file_path}"), contents))
-            }).collect::<anyhow::Result<HashMap<_,_>>>()?;
-            info!("{:?}", workspace_files);
+            let workspace_files = workspace_file_paths
+                .into_iter()
+                .map(|file_path| {
+                    let contents =
+                        std::fs::read_to_string(&file_path).context("Failed to read file")?;
+                    let file_path = file_path
+                        .strip_prefix(&workspace_path)
+                        .context("Expected file to be under workspace")?
+                        .to_str()
+                        .context("Expected utf-8 filepath")?
+                        .to_string();
 
-            workspaces.insert(workspace_path, Project::new(
-                BamlProject {
+                    let absolute_file_path = PathBuf::from(url.path()).join(&file_path);
+                    info!("About to Url::from_file_path({:?})", &absolute_file_path);
+                    // let file_url = Url::from_file_path(&file_path).expect("TODO");
+                    let file_absolute_url = Url::from_file_path(absolute_file_path).unwrap();
+                    let text_document = TextDocument::new(contents.clone(), 0);
+                    index.open_text_document(file_absolute_url, text_document);
+                    Ok((format!("file:///{file_path}"), contents))
+                })
+                .collect::<anyhow::Result<HashMap<_, _>>>()?;
+
+            let workspace_files = HashMap::new();
+            // info!("{:?}", workspace_files);
+
+            workspaces.insert(
+                workspace_path,
+                Project::new(BamlProject {
                     root_dir_name: url.to_string(),
                     files: workspace_files,
                     unsaved_files: HashMap::new(),
-                }
-            ));
+                }),
+            );
         }
 
-        Ok(Self {
+        let mut session = Self {
             position_encoding,
             projects_by_workspace_folder: workspaces,
             index: Some(Arc::new(index)),
             resolved_client_capabilities: Arc::new(ResolvedClientCapabilities::new(
                 client_capabilities,
             )),
-        })
+        };
+        session.reload()?;
+        Ok(session)
 
     }
-
 
     // TODO(dhruvmanila): Ideally, we should have a single method for `workspace_db_for_path_mut`
     // and `default_workspace_db_mut` but the borrow checker doesn't allow that.
@@ -141,10 +156,13 @@ impl Session {
     /// minimum root path in the project map.
     pub(crate) fn default_project_db(&self) -> &Project {
         // SAFETY: Currently, red knot only support a single project.
-        self.projects_by_workspace_folder.values().next().unwrap_or_else(|| {
-            error!("Tried to get default project and there was none");
-            panic!("Tried to get default project and there was none")
-        })
+        self.projects_by_workspace_folder
+            .values()
+            .next()
+            .unwrap_or_else(|| {
+                error!("Tried to get default project and there was none");
+                panic!("Tried to get default project and there was none")
+            })
     }
 
     /// Returns a mutable reference to the default project [`ProjectDatabase`].
@@ -160,6 +178,30 @@ impl Session {
         self.index().key_from_url(url)
     }
 
+    pub fn reload(&mut self) -> anyhow::Result<()> {
+        let project_updates: Vec<HashMap<_, _>> = self
+            .projects_by_workspace_folder
+            .iter_mut()
+            .map(|(_projet_root, project)| {
+                let files_map = project.baml_project.load_files()?;
+                // let files_vec = files_map.into_iter().collect::<Vec<_>>();
+                Ok(files_map)
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+        let files: Vec<(Url, String)> = project_updates
+            .into_iter()
+            .map(|project_files| project_files.into_iter().collect::<Vec<_>>())
+            .flatten()
+            .collect();
+
+        files.iter().for_each(|(file_url, file_contents)| {
+            let text_document = TextDocument::new(file_contents.clone(), 0);
+            self.open_text_document(file_url.clone(), text_document);
+        });
+
+        Ok(())
+    }
+
     /// Creates a document snapshot with the URL referencing the document to snapshot.
     pub fn take_snapshot(&self, url: Url) -> Option<DocumentSnapshot> {
         let key = self.key_from_url(url);
@@ -173,15 +215,23 @@ impl Session {
     /// Registers a text document at the provided `url`.
     /// If a document is already open here, it will be overwritten.
     pub(crate) fn open_text_document(&mut self, url: Url, document: TextDocument) {
-        dbg!(&url);
-        self.index_mut().open_text_document(url.clone(), document.clone());
-        self.projects_by_workspace_folder.iter_mut().for_each(|(folder, project)| {
-            dbg!(&folder);
-            if url.path().starts_with(folder.as_os_str().to_str().expect("TODO: handle error")) {
-                eprintln!("MATCH");
-            }
-            project.baml_project.files.insert(url.as_str().to_string(), document.contents().to_string());
-        });
+        info!("OPEN_TEXT_DOCUMENT: {}", &url);
+        self.index_mut()
+            .open_text_document(url.clone(), document.clone());
+        // self.projects_by_workspace_folder
+        //     .iter_mut()
+        //     .for_each(|(folder, project)| {
+        //         dbg!(&folder);
+        //         if url
+        //             .path()
+        //             .starts_with(folder.as_os_str().to_str().expect("TODO: handle error"))
+        //         {
+        //             eprintln!("MATCH");
+        //         }
+        //         // project.baml_project.files.insert(url.as_str().to_string(), document.contents().to_string());
+        //         // project.baml_project.load_files();
+        //         project.reload().expect("TODO: Handle reload errer");
+        //     })?;
     }
 
     /// Updates a text document at the associated `key`.
@@ -194,7 +244,7 @@ impl Session {
         new_version: DocumentVersion,
     ) -> anyhow::Result<()> {
         let position_encoding = self.position_encoding;
-        
+
         let doc_key = match key {
             DocumentKey::Text(url) => url,
         };
@@ -203,7 +253,10 @@ impl Session {
             index.update_text_document(key, content_changes, new_version, position_encoding)?;
 
             let doc_controller = {
-                index.documents.get(doc_key).expect("We just inserted this, so it should be there")
+                index
+                    .documents
+                    .get(doc_key)
+                    .expect("We just inserted this, so it should be there")
             };
             let text_document = match doc_controller {
                 DocumentController::Text(text_document) => text_document,
@@ -211,14 +264,18 @@ impl Session {
             text_document.contents().to_string()
         };
 
-        self.projects_by_workspace_folder.iter_mut().for_each(|(_folder, project)| {
-            let key_str = doc_key.to_string();
-            if project.baml_project.files.get(&key_str).is_some() {
-                project.baml_project.files.insert(key_str, doc_contents.to_string());
-            }
-        });
+        self.projects_by_workspace_folder
+            .iter_mut()
+            .for_each(|(_folder, project)| {
+                let key_str = doc_key.to_string();
+                if project.baml_project.files.get(&key_str).is_some() {
+                    project
+                        .baml_project
+                        .files
+                        .insert(key_str, doc_contents.to_string());
+                }
+            });
         Ok(())
-        
     }
 
     /// De-registers a document, specified by its key.
@@ -327,7 +384,7 @@ impl DocumentSnapshot {
         self.position_encoding
     }
 
-    /// 
+    ///
     pub(crate) fn file(&self, db: &Project) -> Option<File> {
         let url = self.document_ref.file_url();
         let path = url.to_file_path().ok()?;
@@ -340,6 +397,8 @@ impl DocumentSnapshot {
                 revision: FileRevision::now(),
                 status: FileStatus::Exists,
             })
-        } else { None }
+        } else {
+            None
+        }
     }
 }

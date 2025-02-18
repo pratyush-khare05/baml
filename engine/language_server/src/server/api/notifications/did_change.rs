@@ -7,7 +7,7 @@ use crate::baml_project::watch::ChangeEvent;
 
 use crate::server::api::diagnostics::session_lsp_diagnostics;
 use crate::server::api::traits::{NotificationHandler, SyncNotificationHandler};
-use crate::server::api::LSPResult;
+use crate::server::api::{LSPResult, ResultExt};
 use crate::server::client::{Notifier, Requester};
 use crate::server::Result;
 use crate::session::Session;
@@ -30,10 +30,13 @@ impl SyncNotificationHandler for DidChangeTextDocumentHandler {
         tracing::info!("DidChangeTextDocumentHandler");
 
         let url = params.text_document.uri;
-        let key = DocumentKey::Text(url.clone());
-        session.update_text_document(&key, params.content_changes, params.text_document.version).expect("FAILED TO UPDATE");
+        // let key = DocumentKey::Text(url.clone());
+        // session.update_text_document(&key, params.content_changes, params.text_document.version).expect("FAILED TO UPDATE");
+        
+        session.reload().internal_error()?;
 
         let diagnostics = session_lsp_diagnostics(session);
+        tracing::info!("DID_CHANGE DIAGNOSTICS: {:?}", diagnostics);
 
         // TODO: Only send this when clients do not support pull diagnostics?
         notifier.notify::<lsp_types::notification::PublishDiagnostics>( PublishDiagnosticsParams {

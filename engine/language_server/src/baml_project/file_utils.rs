@@ -44,6 +44,7 @@ pub fn find_top_level_parent(file_path: &Path) -> Option<PathBuf> {
 /// * `Ok(Vec<PathBuf>)` containing the paths of discovered files,
 ///   or an `io::Error` if an error is encountered.
 pub fn gather_files(root_path: &Path, debug: bool) -> io::Result<Vec<PathBuf>> {
+    tracing::info!("GATHER FILES");
     let mut visited_dirs = HashSet::new();
     let mut dir_stack = Vec::new();
     let mut file_list = Vec::new();
@@ -99,6 +100,7 @@ pub fn gather_files(root_path: &Path, debug: bool) -> io::Result<Vec<PathBuf>> {
             }
         }
     }
+    tracing::info!("Gather result: {:?}", file_list);
     Ok(file_list)
 }
 
