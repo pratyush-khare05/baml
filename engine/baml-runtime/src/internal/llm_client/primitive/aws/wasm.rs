@@ -43,16 +43,16 @@ output = table
         .sleep_impl(BrowserSleep)
         .time_source(BrowserTime)
         .http_client(BrowserHttp2::new())
-    // .profile_files(
-    //     aws_runtime::env_config::file::EnvConfigFiles::builder()
-    //         .include_default_config_file(false)
-    //         .include_default_credentials_file(false)
-    //         .with_contents(
-    //             aws_runtime::env_config::file::EnvConfigFileKind::Config,
-    //             aws_config_contents,
-    //         )
-    //         .build(),
-    // )
+        .profile_files(
+            aws_runtime::env_config::file::EnvConfigFiles::builder()
+                .include_default_config_file(false)
+                .include_default_credentials_file(false)
+                .with_contents(
+                    aws_runtime::env_config::file::EnvConfigFileKind::Config,
+                    aws_config_contents,
+                )
+                .build(),
+        )
 }
 
 #[derive(Debug)]

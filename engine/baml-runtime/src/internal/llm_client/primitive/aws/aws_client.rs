@@ -155,12 +155,15 @@ impl AwsClient {
                 if let Some(profile) = self.properties.profile.as_ref() {
                     builder = builder.profile_name(profile);
                 }
-                // loader.credentials_provider(WasmAwsCreds {
-                //     default_chain: builder.build().await,
-                // })
-                loader.credentials_provider(builder.build().await)
+                log::debug!("Building wasm aws credentials chain - none of access key id / secret access key / session token provided");
+                // is it because of the 'static lifetime requirement?
+                loader.credentials_provider(WasmAwsCreds {
+                    default_chain: builder.build().await,
+                })
+                // loader.credentials_provider(builder.build().await)
             }
             _ => {
+                log::debug!("Building wasm aws credentials chain - at least one of access key id / secret access key / session token provided");
                 if let Some(aws_access_key_id) = self.properties.access_key_id.as_ref() {
                     if aws_access_key_id.starts_with("$") {
                         return Err(anyhow::anyhow!(
