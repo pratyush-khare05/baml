@@ -30,10 +30,29 @@ use std::sync::Arc;
 use std::time::SystemTime;
 
 pub fn load_aws_config() -> ConfigLoader {
+    log::debug!("Loading AWS config for wasm specifically");
+    let aws_config_contents = r#"
+                [profile boundaryml-dev]
+sso_session = boundaryml
+sso_account_id = 147997132427
+sso_role_name = AdministratorAccess
+region = us-east-1
+output = table
+"#;
     aws_config::defaults(BehaviorVersion::latest())
         .sleep_impl(BrowserSleep)
         .time_source(BrowserTime)
         .http_client(BrowserHttp2::new())
+    // .profile_files(
+    //     aws_runtime::env_config::file::EnvConfigFiles::builder()
+    //         .include_default_config_file(false)
+    //         .include_default_credentials_file(false)
+    //         .with_contents(
+    //             aws_runtime::env_config::file::EnvConfigFileKind::Config,
+    //             aws_config_contents,
+    //         )
+    //         .build(),
+    // )
 }
 
 #[derive(Debug)]
