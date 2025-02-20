@@ -133,8 +133,8 @@ fn background_request_task<'a, R: traits::BackgroundDocumentRequestHandler>(
         let db = session.default_project_db().clone();
 
         Box::new(move |notifier, responder| {
-            let result = R::run_with_snapshot(snapshot, db, notifier, params);
-            respond::<R>(id, result, &responder);
+            // let result = R::run_with_snapshot(snapshot, db, notifier, params);
+            // respond::<R>(id, result, &responder);
         })
     }))
 }
@@ -163,10 +163,10 @@ fn background_notification_thread<'a, N: traits::BackgroundDocumentNotificationH
             return Box::new(|_, _| {});
         };
         Box::new(move |notifier, _| {
-            if let Err(err) = N::run_with_snapshot(snapshot, notifier, params) {
-                tracing::error!("An error occurred while running {id}: {err}");
-                show_err_msg!("Ruff encountered a problem. Check the logs for more details.");
-            }
+            // if let Err(err) = N::run_with_snapshot(snapshot, notifier, params) {
+            //     tracing::error!("An error occurred while running {id}: {err}");
+            //     show_err_msg!("Ruff encountered a problem. Check the logs for more details.");
+            // }
         })
     }))
 }

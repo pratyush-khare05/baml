@@ -44,7 +44,7 @@ impl SyncNotificationHandler for DidOpenTextDocumentHandler {
         // session.open_text_document(url.clone(), document);
         session.reload().internal_error()?;
 
-        let diagnostics = session_lsp_diagnostics(session);
+        let diagnostics = session_lsp_diagnostics(session, &url);
 
         // TODO: Only send this when clients do not support pull diagnostics?
         notifier.notify::<lsp_types::notification::PublishDiagnostics>( PublishDiagnosticsParams {

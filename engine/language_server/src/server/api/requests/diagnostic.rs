@@ -54,6 +54,9 @@ fn compute_diagnostics(snapshot: &DocumentSnapshot, db: &Project) -> Vec<Diagnos
             "No file found for snapshot for `{}`",
             snapshot.query().file_url()
         );
+
+
+        // let diagnostics = session_lsp_diagnostics(session);
         return vec![];
     };
 

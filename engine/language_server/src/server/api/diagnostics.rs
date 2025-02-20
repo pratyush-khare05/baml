@@ -5,7 +5,6 @@ use lsp_types::{notification::PublishDiagnostics, PublishDiagnosticsParams, Url}
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use baml_runtime::InternalRuntimeInterface;
-use internal_baml_diagnostics::Diagnostics;
 
 use crate::baml_text_size::TextSize;
 use crate::server::client::Notifier;
@@ -27,7 +26,7 @@ pub(super) fn clear_diagnostics(uri: &Url, notifier: &Notifier) -> Result<()> {
 
 // TODO: This assumes a single project. Fix.
 // TODO: Handle errors.
-pub fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> {
+pub fn session_lsp_diagnostics(session: &Session, file_url: &Url) -> Vec<lsp_types::Diagnostic> {
     let keys = session.index().documents.keys();
     info!("session_lsp_diagnostics. index keys: {:?}", keys);
     let (root_path, proj) = session.projects_by_workspace_folder.iter().next().expect("Should be 1 project");
@@ -36,12 +35,12 @@ pub fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> 
     info!("baml_project runtime on {:?}", proj.baml_project);
     let baml_diagnostics = match proj.baml_project.runtime(fake_env) {
         Ok(runtime) => {
-            info!("OK Diagnostics: {:?}", runtime.internal().diagnostics());
+            tracing::info!("OK Diagnostics: {:?}", runtime.internal().diagnostics());
             runtime.internal().diagnostics().clone()
             // Diagnostics::new(PathBuf::from("/fake1"))
         },
         Err(err) => {
-            info!("Err Diagnostics: {:?}", err);
+            tracing::info!("Err Diagnostics: {:?}", err);
             // let mut diagnostics = internal_baml_diagnostics::Diagnostics::new(PathBuf::new());
             // diagnostics.push_error(err);
             err
@@ -58,8 +57,8 @@ pub fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> 
     info!("SPANS: {:?}", spans);
 
     let errors = 
-        baml_diagnostics.errors().iter().map(|error| lsp_types::Diagnostic::new(
-            span_to_range(session, root_path, error.span()).expect("Need a range"),
+        baml_diagnostics.errors().iter().filter(|e| matches_target(root_path, file_url, &e.span())).map(|error| lsp_types::Diagnostic::new(
+            span_to_range(session, root_path, file_url, error.span()).expect("Need a range"),
             Some(DiagnosticSeverity::ERROR),
             None,
             None,
@@ -68,8 +67,8 @@ pub fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> 
             None
         ));
     let warnings =
-        baml_diagnostics.warnings().iter().map(|warning| lsp_types::Diagnostic::new(
-            span_to_range(session, root_path, warning.span()).expect("Need a range"),
+        baml_diagnostics.warnings().iter().filter(|w| matches_target(root_path, file_url, &w.span())).map(|warning| lsp_types::Diagnostic::new(
+            span_to_range(session, root_path, file_url, warning.span()).expect("Need a range"),
             Some(DiagnosticSeverity::WARNING),
             None,
             None,
@@ -80,14 +79,41 @@ pub fn session_lsp_diagnostics(session: &Session) -> Vec<lsp_types::Diagnostic> 
     errors.chain(warnings).collect()
 }
 
-fn span_to_range(session: &Session, project_root: &Path, span: &internal_baml_diagnostics::Span) -> Option<lsp_types::Range> {
-    // These are formatted as 
+fn matches_target(project_root: &Path, target: &Url, span: &internal_baml_diagnostics::Span) -> bool {
+    if let Some(span_path) = span.file.path().strip_prefix("file://") {
+        PathBuf::from(target.path()) == ensure_absolute(project_root, &PathBuf::from(span_path))
+    } else {
+        tracing::warn!("Encountered a span with non-url path: {:?}", span);
+        false
+    }
+}
+
+/// Convert a baml Span into a lsp_types::Range for use in an `lsp_types::Diagnostic.
+/// Params:
+///   - session: Pass the server session, we'll need it for getting the span's
+///     document's line index.
+///   - project_root: Root of the baml project, needed for augmenting span paths, which
+///     seem to sporadically be absolute paths.
+///   - file_url: The absolute file:/// url of the file whose diagnostics we care about.
+///     spans not related to this URL will be filtered out.
+///   - span: The baml span to convert.
+fn span_to_range(
+    session: &Session,
+    project_root: &Path,
+    file_url: &Url,
+    span: &internal_baml_diagnostics::Span
+) -> Option<lsp_types::Range> {
+
+    info!("SPAN_TO_RANGE({:?},{:?})", project_root, span.file.path());
+
     let span_path_with_prefix = span.file.path();
     let span_path = span_path_with_prefix.strip_prefix("file://")?;
     info!("span_path: {}", span_path);
     info!("absolute_path = join {:?} with {:?}", project_root, span_path);
     let absolute_path = project_root.join(span_path).clone();
     dbg!(&absolute_path);
+
+
     // info!("About to URL::parse {:?}", absolute_path);
     let url = Url::from_file_path(span_path).or(Url::from_file_path(absolute_path)).expect("Should parse");
     let doc_key = Url::from_file_path(ensure_absolute(project_root, &PathBuf::from(span_path))).expect("Should parse2");

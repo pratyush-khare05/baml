@@ -178,18 +178,8 @@ impl BamlProject {
     pub fn load_files(&mut self) -> anyhow::Result<HashMap<Url, String>> {
         let workspace_file_paths = gather_files(&PathBuf::from(&self.root_dir_name), false)?;
         let workspace_files = workspace_file_paths.into_iter().map(|file_path| {
-            tracing::info!("ABOUT TO OPEN {:?}", file_path);
             let contents = std::fs::read_to_string(&file_path).context("Failed to read file")?;
-            tracing::info!("FINISHED OPEN {:?}", file_path);
-
-            // let file_path = file_path.strip_prefix(&self.root_dir_name).context("Expected file to be under workspace")?.to_str().context("Expected utf-8 filepath")?.to_string();
-
-            // let absolute_file_path = PathBuf::from().join(&file_path);
-            // info!("About to Url::from_file_path({:?})", &absolute_file_path);
             let file_url = Url::from_file_path(&file_path).expect("TODO");
-            // let file_absolute_url = Url::from_file_path(file_path).unwrap();
-            // let text_document = TextDocument::new(contents.clone(), 0);
-            // index.open_text_document(file_url, text_document);
             Ok((file_url, contents))
         }).collect::<anyhow::Result<HashMap<_,_>>>()?;
 
@@ -203,9 +193,10 @@ impl BamlProject {
 
     pub fn runtime(&self, env_vars: HashMap<String, String>) -> Result<BamlRuntime, Diagnostics> {
         let mut hm = self.files.iter().collect::<HashMap<_, _>>();
+        tracing::info!("UNSAVED: {:?}", self.unsaved_files);
         hm.extend(self.unsaved_files.iter());
         tracing::info!("runtime files: {:?}", hm.keys());
-        panic!("SHORTCIRCUIT RUNTIME: {:?}", hm.keys());
+        // panic!("SHORTCIRCUIT RUNTIME: {:?}", hm.keys());
 
         BamlRuntime::from_file_content(&self.root_dir_name, &hm, env_vars)
             .map_err(|e| match e.downcast::<DiagnosticsError>() {

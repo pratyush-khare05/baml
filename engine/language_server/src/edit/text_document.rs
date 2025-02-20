@@ -82,6 +82,7 @@ impl TextDocument {
         new_version: DocumentVersion,
         encoding: PositionEncoding,
     ) {
+        tracing::info!("APPLY_CHANGES");
         if let [lsp_types::TextDocumentContentChangeEvent {
             range: None, text, ..
         }] = changes.as_slice()
@@ -103,8 +104,29 @@ impl TextDocument {
             ..
         } in changes
         {
+            tracing::info!("APPLY_CHANGE {:?}", range);
             if let Some(range) = range {
                 let range = range.to_text_range(&new_contents, &active_index, encoding);
+                // tracing::info!("  APPLY_CHANGE new range: {:?}", range);
+                // tracing::info!("  APPLY_CHANGE new_contents: {:?}", new_contents);
+                // tracing::info!("  APPLY_CHANGE change: {:?}", change);
+
+                // let orig = text.text();
+
+                // let offset_start = text.pos_to_offset(&range.start).unwrap();
+                // let offset_end = text.pos_to_offset(&range.end).unwrap();
+                // debug_assert!(
+                //     offset_start <= offset_end,
+                //     "Expected start <= end, got {}..{}",
+                //     offset_start,
+                //     offset_end
+                // );
+                // debug_assert!(
+                //     offset_end <= orig.len(),
+                //     "Expected end <= text.len(), got {} > {}",
+                //     offset_end,
+                //     orig.len()
+                // );
 
                 new_contents.replace_range(
                     usize::from(range.start())..usize::from(range.end()),

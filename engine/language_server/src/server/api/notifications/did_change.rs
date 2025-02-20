@@ -30,12 +30,12 @@ impl SyncNotificationHandler for DidChangeTextDocumentHandler {
         tracing::info!("DidChangeTextDocumentHandler");
 
         let url = params.text_document.uri;
-        // let key = DocumentKey::Text(url.clone());
-        // session.update_text_document(&key, params.content_changes, params.text_document.version).expect("FAILED TO UPDATE");
+        let key = DocumentKey::Text(url.clone());
         
-        session.reload().internal_error()?;
+        // session.reload().internal_error()?;
+        session.update_text_document(&key, params.content_changes, params.text_document.version).expect("FAILED TO UPDATE");
 
-        let diagnostics = session_lsp_diagnostics(session);
+        let diagnostics = session_lsp_diagnostics(session, &url);
         tracing::info!("DID_CHANGE DIAGNOSTICS: {:?}", diagnostics);
 
         // TODO: Only send this when clients do not support pull diagnostics?

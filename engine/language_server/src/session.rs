@@ -75,40 +75,12 @@ impl Session {
             // TODO(dhruvmanila): Get the values from the client settings
             // let metadata = ProjectMetadata::discover(system_path, &system)?;
             // TODO(micha): Handle the case where the program settings are incorrect more gracefully.
-            info!("ABOUT TO CALL gather_files on {:?}", &workspace_path);
-            let workspace_file_paths = gather_files(&workspace_path, false)?;
-            info!("WORKSPACE_FILE_PATHS {:?}", workspace_file_paths);
-
-            let workspace_files = workspace_file_paths
-                .into_iter()
-                .map(|file_path| {
-                    let contents =
-                        std::fs::read_to_string(&file_path).context("Failed to read file")?;
-                    let file_path = file_path
-                        .strip_prefix(&workspace_path)
-                        .context("Expected file to be under workspace")?
-                        .to_str()
-                        .context("Expected utf-8 filepath")?
-                        .to_string();
-
-                    let absolute_file_path = PathBuf::from(url.path()).join(&file_path);
-                    info!("About to Url::from_file_path({:?})", &absolute_file_path);
-                    // let file_url = Url::from_file_path(&file_path).expect("TODO");
-                    let file_absolute_url = Url::from_file_path(absolute_file_path).unwrap();
-                    let text_document = TextDocument::new(contents.clone(), 0);
-                    index.open_text_document(file_absolute_url, text_document);
-                    Ok((format!("file:///{file_path}"), contents))
-                })
-                .collect::<anyhow::Result<HashMap<_, _>>>()?;
-
-            let workspace_files = HashMap::new();
-            // info!("{:?}", workspace_files);
 
             workspaces.insert(
                 workspace_path,
                 Project::new(BamlProject {
-                    root_dir_name: url.to_string(),
-                    files: workspace_files,
+                    root_dir_name: url.path().to_string(),
+                    files: HashMap::new(),
                     unsaved_files: HashMap::new(),
                 }),
             );

@@ -1,4 +1,7 @@
-use crate::server::api::LSPResult;
+
+use lsp_types::{PublishDiagnosticsParams, Url};
+use crate::server::api::diagnostics::session_lsp_diagnostics;
+use crate::server::api::{LSPResult, ResultExt};
 use crate::server::client::{Notifier, Requester};
 use crate::server::schedule::Task;
 use crate::server::Result;
@@ -21,6 +24,28 @@ impl super::SyncNotificationHandler for DidChangeWatchedFiles {
     ) -> Result<()> {
         tracing::info!("DidChangeWatchedFiles");
         // session.reload_settings(&params.changes);
+
+        session.reload().internal_error()?;
+
+        let change_file_paths: Vec<Url> = params.changes.into_iter().map(|file_event| file_event.uri).collect();
+        tracing::info!("change_file_paths urls: {:?}", change_file_paths);
+
+        if let Some(url) = change_file_paths.into_iter().next() {
+
+            let diagnostics = session_lsp_diagnostics(session, &url);
+            tracing::info!("DID_CHANGE_WATCHED_FILES DIAGNOSTICS: {:?}", diagnostics);
+
+            // TODO: Only send this when clients do not support pull diagnostics?
+            notifier.notify::<lsp_types::notification::PublishDiagnostics>( PublishDiagnosticsParams {
+                uri: url,
+                version: None,
+                diagnostics,
+            }).map_err(|e| {
+                tracing::error!("did_change err: {}", e)
+            }).unwrap();
+
+        }
+
 
         // if !params.changes.is_empty() {
         //     if session.resolved_client_capabilities().workspace_refresh {
