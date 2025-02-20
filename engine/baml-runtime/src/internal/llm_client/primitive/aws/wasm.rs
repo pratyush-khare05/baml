@@ -146,3 +146,20 @@ impl HttpClient for BrowserHttp2 {
         self.clone().into_shared()
     }
 }
+
+#[derive(Debug)]
+pub(super) struct WasmAwsCreds {
+    pub default_chain: aws_config::default_provider::credentials::DefaultCredentialsChain,
+}
+
+impl aws_credential_types::provider::ProvideCredentials for WasmAwsCreds {
+    fn provide_credentials<'a>(
+        &'a self,
+    ) -> aws_credential_types::provider::future::ProvideCredentials<'a>
+    where
+        Self: 'a,
+    {
+        log::debug!("Providing AWS credentials for wasm");
+        self.default_chain.provide_credentials()
+    }
+}

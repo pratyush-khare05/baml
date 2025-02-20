@@ -36,6 +36,7 @@ use crate::internal::llm_client::{
     ModelFeatures, ResolveMediaUrls,
 };
 
+use super::wasm::WasmAwsCreds;
 use crate::{RenderCurlSettings, RuntimeContext};
 
 // represents client that interacts with the Bedrock API
@@ -154,7 +155,9 @@ impl AwsClient {
                 if let Some(profile) = self.properties.profile.as_ref() {
                     builder = builder.profile_name(profile);
                 }
-                // If no credentials provided, get them all from env vars
+                // loader.credentials_provider(WasmAwsCreds {
+                //     default_chain: builder.build().await,
+                // })
                 loader.credentials_provider(builder.build().await)
             }
             _ => {
