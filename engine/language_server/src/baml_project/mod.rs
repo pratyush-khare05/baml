@@ -149,9 +149,30 @@ impl BamlProject {
         &self,
         no_version_check: Option<bool>,
     ) -> Result<Vec<GenerateOutput>, anyhow::Error> {
-        Err(anyhow::anyhow!(
-            "This function is not available in the wasm target."
-        ))
+        let env = std::env::vars().collect();
+        let runtime = self.runtime(env)?;
+        let all_files = self.files.iter().map(|(file_name, contents)| {
+            let path_buf = file_name.strip_prefix("file://").unwrap_or(file_name);
+            (PathBuf::from(path_buf), contents.clone())
+       }
+        ).collect();
+        let generated = runtime.run_codegen(&all_files, no_version_check.unwrap_or(false))?;
+
+        match generated.len() {
+            1 => tracing::info!(
+                "Generated 1 baml_client: {}",
+                generated[0].output_dir_full.display()
+            ),
+            n => tracing::info!(
+                "Generated {n} baml_clients: {}",
+                generated
+                    .iter()
+                    .map(|g| g.output_dir_shorthand.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        }
+        Ok(generated)
     }
 
     pub fn set_unsaved_file(&mut self, name: &str, content: Option<String>) {

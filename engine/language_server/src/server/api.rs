@@ -60,6 +60,7 @@ pub(super) fn request<'a>(req: lsp_server::Request) -> Task<'a> {
 }
 
 pub(super) fn notification<'a>(notif: lsp_server::Notification) -> Task<'a> {
+    tracing::info!("NOTIFICATION: {}", notif.method.as_str());
     match notif.method.as_str() {
         notification::DidChangeTextDocumentHandler::METHOD => {
             local_notification_task::<notification::DidChangeTextDocumentHandler>(notif)
@@ -75,15 +76,9 @@ pub(super) fn notification<'a>(notif: lsp_server::Notification) -> Task<'a> {
         // }
         notification::DidCloseTextDocumentHandler::METHOD => local_notification_task::<notification::DidCloseTextDocumentHandler>(notif),
         notification::DidOpenTextDocumentHandler::METHOD => local_notification_task::<notification::DidOpenTextDocumentHandler>(notif),
-        // notification::DidOpenNotebook::METHOD => {
-        //     local_notification_task::<notification::DidOpenNotebook>(notif)
-        // }
-        // notification::DidChangeNotebook::METHOD => {
-        //     local_notification_task::<notification::DidChangeNotebook>(notif)
-        // }
-        // notification::DidCloseNotebook::METHOD => {
-        //     local_notification_task::<notification::DidCloseNotebook>(notif)
-        // }
+        notification::DidSaveTextDocument::METHOD => {
+            local_notification_task::<notification::DidSaveTextDocument>(notif)
+        }
         method => {
             tracing::warn!("Received notification {method} which does not have a handler.");
             return Task::nothing();

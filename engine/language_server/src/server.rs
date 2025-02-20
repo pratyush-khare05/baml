@@ -9,10 +9,7 @@ use std::path::PathBuf;
 
 use lsp_server::Message;
 use lsp_types::{
-    ClientCapabilities, DiagnosticOptions, DiagnosticServerCapabilities,
-    DidChangeWatchedFilesRegistrationOptions, FileSystemWatcher, InitializeParams, MessageType,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions,
-    Url,
+    ClientCapabilities, DiagnosticOptions, DiagnosticServerCapabilities, DidChangeWatchedFilesRegistrationOptions, FileSystemWatcher, InitializeParams, MessageType, SaveOptions, ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, TextDocumentSyncSaveOptions, Url
 };
 use schedule::Task;
 
@@ -109,11 +106,19 @@ impl Server {
             }).collect())
             .or_else(|| {
                 tracing::warn!("No workspace(s) were provided during initialization. Using the current working directory as a default workspace...");
-                let baml_src_dir = find_top_level_parent(&std::env::current_dir().ok()?)?;
-                info!("OR_ELSE: {:?}", baml_src_dir);
-                let uri = Url::from_file_path(baml_src_dir).ok()?;
-                // let uri = Url::from_file_path(std::env::current_dir().ok()?).ok()?;
-                Some(vec![workspace_for_url(uri)])
+                let pwd = std::env::current_dir().ok()?;
+                // tracing::info!("Trying to find_top_level_parent({:?})", pwd);
+                // let res = find_top_level_parent(&std::env::current_dir().ok()?);
+                if pwd.ends_with("baml_src") {
+                    let url = Url::from_file_path(pwd).expect("PWD should be valid");
+                    Some(vec![workspace_for_url(url)])
+                } else {
+                    let baml_src_dir = find_top_level_parent(&std::env::current_dir().ok()?)?;
+                    info!("OR_ELSE: {:?}", baml_src_dir);
+                    let uri = Url::from_file_path(baml_src_dir).ok()?;
+                    // let uri = Url::from_file_path(std::env::current_dir().ok()?).ok()?;
+                    Some(vec![workspace_for_url(uri)])
+                }
             })
             .ok_or_else(|| {
                 anyhow::anyhow!("Failed to get the current working directory while creating a default workspace.")
@@ -297,6 +302,8 @@ impl Server {
                 TextDocumentSyncOptions {
                     open_close: Some(true),
                     change: Some(TextDocumentSyncKind::INCREMENTAL),
+                    will_save: Some(true),
+                    save: Some(TextDocumentSyncSaveOptions::SaveOptions(SaveOptions { include_text: Some(false )})),
                     ..Default::default()
                 },
             )),

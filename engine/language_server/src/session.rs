@@ -156,6 +156,7 @@ impl Session {
             .iter_mut()
             .map(|(_projet_root, project)| {
                 let files_map = project.baml_project.load_files()?;
+                project.baml_project.unsaved_files.clear();
                 // let files_vec = files_map.into_iter().collect::<Vec<_>>();
                 Ok(files_map)
             })
@@ -166,6 +167,7 @@ impl Session {
             .flatten()
             .collect();
 
+        // Index all the files.
         files.iter().for_each(|(file_url, file_contents)| {
             let text_document = TextDocument::new(file_contents.clone(), 0);
             self.open_text_document(file_url.clone(), text_document);
